@@ -1,14 +1,41 @@
-- name: Deploy to Tomcat
+---
+- name: Deploy Maven WAR to Tomcat
   hosts: web
   become: yes
-  tasks:
-    - name: Copy WAR file to Tomcat
-      copy:
-        src: "/var/snap/jenkins/4859/workspace/MavenAnsible-CICD/target/MavenAnsibleWebApp.war"
-        dest: "/opt/tomcat/webapps/MavenAnsibleWebApp.war"
-        remote_src: no
+  vars:
+    war_source: "/var/snap/jenkins/4859/workspace/MavenAnsible-CICD/target/MavenAnsibleWebApp.war"
+    war_dest: "/opt/tomcat/webapps/MavenAnsibleWebApp.war"
+    tomcat_user: tomcat
+    tomcat_service: tomcat  # Change to tomcat9 or tomcat8 if needed
 
-    - name: Restart Tomcat
+  tasks:
+
+    - name: Check if WAR file exists on control node
+      stat:
+        path: "{{ war_source }}"
+      delegate_to: localhost
+      register: war_file
+
+    - name: Fail if WAR file does not exist
+      fail:
+        msg: "WAR file not found at {{ war_source }}"
+      when: not war_file.stat.exists
+      delegate_to: localhost
+
+    - name: Copy WAR file to Tomcat webapps directory
+      copy:
+        src: "{{ war_source }}"
+        dest: "{{ war_dest }}"
+      delegate_to: localhost
+
+    - name: Set permissions on deployed WAR file
+      file:
+        path: "{{ war_dest }}"
+        owner: "{{ tomcat_user }}"
+        group: "{{ tomcat_user }}"
+        mode: '0644'
+
+    - name: Restart Tomcat service
       systemd:
-        name: tomcat
+        name: "{{ tomcat_service }}"
         state: restarted
